@@ -78,39 +78,44 @@ class Block(torch.nn.Module):
         return x
 
 class GPTMinus1(torch.nn.Module):
-    def __init__(self, vocab_size: int, n_ctx: int, d_model: int, n_heads: int, n_layers: int, dropout=0.1):
+    def __init__(self, vocab_size: int, n_ctx: int, d_model: int, n_heads: int, n_layers: int, dropout: float = 0.1, device: str = "cuda"):
         super(GPTMinus1, self).__init__()
         self.text_embedding = torch.nn.Embedding(vocab_size, d_model)
         self.positional_encoding = torch.nn.Embedding(n_ctx, d_model)
 
         self.transformer = torch.nn.ModuleList([Block(d_model, n_heads, dropout) for _ in range(n_layers)])
 
-        self.linear = torch.nn.Linear(d_model, vocab_size)
+        self.linear = torch.nn.Linear(d_model, vocab_size, bias=False)
         self.dropout = torch.nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor):
         seq_length = x.size(1)
-        x = self.text_embedding(x) + self.positional_encoding(torch.arange(0, seq_length, dtype=torch.long))
+        positions = torch.arange(seq_length, dtype=torch.long, device=self.device)
+        x = self.text_embedding(x) + self.positional_encoding(positions)
         x = self.dropout(x)
         for block in self.transformer:
             x = block(x)
         x = self.linear(x)
         return x
 
-def create_optimizer(model: GPTMinus1, lr: float = 1e-4, weight_decay: float = 0.01):
+def create_optimizer(model: GPTMinus1, lr: float = 1e-3, weight_decay: float = 0.01):
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     return optimizer
 
-def create_scheduler(optimizer: torch.optim.Optimizer, num_warmup_steps: int, num_training_steps: int):
-    def lr_lambda(current_step):
-        if current_step < num_warmup_steps:
-            return float(current_step) / float(max(1, num_warmup_steps))
-        return max(0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps)))
+def create_scheduler(optimizer: torch.optim.Optimizer, d_model: int, num_warmup_steps: int):
+    def lr_lambda(current_step: int):
+        return (1.0 / max(1.0, math.sqrt(d_model))) * min(1.0 / max(1.0, math.sqrt(current_step)), current_step * (num_warmup_steps ** 1.5))
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     return scheduler
 
-def save_model(model: GPTMinus1, optimizer: torch.optim.Optimizer, scheduler: torch.optim.lr_scheduler.LRScheduler, epoch: int, path: str):
+def save_model(
+    model: GPTMinus1,
+    optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
+    epoch: int,
+    path: str
+):
     torch.save({
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
@@ -118,7 +123,12 @@ def save_model(model: GPTMinus1, optimizer: torch.optim.Optimizer, scheduler: to
         'scheduler_state_dict': scheduler.state_dict(),
     }, path)
 
-def load_model(model: GPTMinus1, optimizer: torch.optim.Optimizer, scheduler: torch.optim.lr_scheduler.LRScheduler, path: str):
+def load_model(
+    model: GPTMinus1,
+    optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
+    path: str
+):
     checkpoint = torch.load(path)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])

@@ -50,23 +50,20 @@ def clean_text(read_path: str, write_path: str):
     split_docs[0] = split_docs[0][len(f"{START_TOKEN}\n"):]
     split_docs[-1] = split_docs[-1][:-len(f"\n{END_TOKEN}")]
 
+    if not os.path.exists(write_path):
+        os.makedirs(write_path)
     for i in range(len(split_docs)):
         split_docs[i] = pypandoc.convert_text(
-            split_docs[i],
+            split_docs[i].strip(),
             to='md',
             format='html',
             extra_args=["--wrap=none", "-M2GB", "+RTS", "-K64m", "-RTS"]
         )
 
-    split_docs[0] = f"{START_TOKEN}\n\n" + split_docs[0]
-    split_docs[-1] = split_docs[-1] + f"\n{END_TOKEN}"
-    content = f"\n{END_TOKEN}\n{START_TOKEN}\n\n".join(split_docs)
-
-    print("Writing File:", write_path)
-    if not os.path.exists(os.path.dirname(write_path)):
-        os.makedirs(os.path.dirname(write_path))
-    with open(write_path, 'w', encoding='utf-8') as f:
-        f.write(content)
+        file_name = os.path.join(write_path, str(i))
+        print("Writing File:", file_name)
+        with open(file_name, 'w', encoding='utf-8') as f:
+            f.write(split_docs[i])
 
 data_dir = "./texthtml"
 data_paths = glob.glob(os.path.join(data_dir, "**"), recursive=True)

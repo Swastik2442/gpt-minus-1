@@ -18,6 +18,9 @@ class MultiHeadAttention(torch.nn.Module):
 
         self.attn_dropout = torch.nn.Dropout(dropout)
         self.proj_dropout = torch.nn.Dropout(dropout)
+        # # causal mask to ensure that attention is only applied to the left in the input sequence
+        # self.register_buffer("bias", torch.tril(torch.ones(n_ctx, n_ctx))
+        #                             .view(1, 1, n_ctx, n_ctx))
 
     def forward(self, x: torch.Tensor):
         B, C, D = x.size() # batch size, n_ctx, d_model
@@ -34,6 +37,7 @@ class MultiHeadAttention(torch.nn.Module):
 
         # calculate self-attention
         att = (q @ k.transpose(-2, -1)) * self.d_k_sqrt_inv # (B, nh, C, hs) x (B, nh, hs, C) -> (B, nh, C, C)
+        # att = att.masked_fill(self.bias[:,:,:C,:C] == 0, float('-inf'))
         att = self.softmax(att)
         att = self.attn_dropout(att)
         y = att @ v                                         # (B, nh, C, C) x (B, nh, C, hs) -> (B, nh, C, hs)
@@ -84,6 +88,7 @@ class GPTMinus1(torch.nn.Module):
         self.positional_encoding = torch.nn.Embedding(n_ctx, d_model)
 
         self.transformer = torch.nn.ModuleList([Block(d_model, n_heads, dropout) for _ in range(n_layers)])
+        # self.ln_f = torch.nn.LayerNorm(d_model)
 
         self.linear = torch.nn.Linear(d_model, vocab_size, bias=False)
         self.dropout = torch.nn.Dropout(dropout)
@@ -96,6 +101,7 @@ class GPTMinus1(torch.nn.Module):
         x = self.dropout(x)
         for block in self.transformer:
             x = block(x)
+        # x = self.ln_f(x)
         x = self.linear(x)
         return x
 

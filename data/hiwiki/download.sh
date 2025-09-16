@@ -10,7 +10,7 @@ lbzip2 -dkv hiwiki-latest-pages-articles.xml.bz2
 
 # Convert to HTML Format
 pip3 install wikiextractor
-python3 -m wikiextractor.WikiExtractor hiwiki-latest-pages-articles.xml --html --links
+python3 -m wikiextractor.WikiExtractor hiwiki-latest-pages-articles.xml --html --links texthtml
 
 # Clean the Format to produce Markdown
 if ! command -v pandoc &> /dev/null; then

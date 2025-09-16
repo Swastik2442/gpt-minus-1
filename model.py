@@ -87,6 +87,7 @@ class GPTMinus1(torch.nn.Module):
 
         self.linear = torch.nn.Linear(d_model, vocab_size, bias=False)
         self.dropout = torch.nn.Dropout(dropout)
+        self.device = device
 
     def forward(self, x: torch.Tensor):
         seq_length = x.size(1)
@@ -98,7 +99,7 @@ class GPTMinus1(torch.nn.Module):
         x = self.linear(x)
         return x
 
-def create_optimizer(model: GPTMinus1, lr: float = 1e-3, weight_decay: float = 0.01):
+def create_optimizer(model: GPTMinus1, lr: float, weight_decay: float):
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     return optimizer
 
@@ -135,63 +136,3 @@ def load_model(
     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
     epoch = checkpoint['epoch']
     return epoch
-
-def train_step(model: GPTMinus1, optimizer: torch.optim.Optimizer, scheduler: torch.optim.lr_scheduler.LRScheduler, criterion: torch.nn.CrossEntropyLoss, inputs: torch.Tensor, targets: torch.Tensor):
-    model.train()
-    optimizer.zero_grad()
-    outputs = model(inputs)
-    loss = criterion(outputs.view(-1, outputs.size(-1)), targets.view(-1))
-    loss.backward()
-    optimizer.step()
-    scheduler.step()
-    return loss.item()
-
-def eval_step(model: GPTMinus1, criterion: torch.nn.CrossEntropyLoss, inputs: torch.Tensor, targets: torch.Tensor):
-    model.eval()
-    with torch.no_grad():
-        outputs = model(inputs)
-        loss = criterion(outputs.view(-1, outputs.size(-1)), targets.view(-1))
-    return loss.item()
-
-def generate_text(model: GPTMinus1, start_token, max_length, tokenizer, device):
-    model.eval()
-    generated = [start_token]
-    input_ids = torch.tensor(generated, dtype=torch.long).unsqueeze(0).to(device)
-
-    for _ in range(max_length - 1):
-        with torch.no_grad():
-            outputs = model(input_ids)
-            next_token_logits = outputs[0, -1, :]
-            next_token = torch.argmax(next_token_logits).item()
-            generated.append(next_token)
-            input_ids = torch.tensor(generated, dtype=torch.long).unsqueeze(0).to(device)
-
-    return tokenizer.decode(generated)
-
-if __name__ == "__main__":
-    batch_size = 8
-    vocab_size = 1024
-    n_ctx = 256
-    d_model = 256
-    n_heads = 4
-    n_layers = 2
-    epochs = 1000
-    model = GPTMinus1(vocab_size, n_ctx, d_model, n_heads, n_layers)
-
-    optimizer = create_optimizer(model)
-    scheduler = create_scheduler(optimizer, num_warmup_steps=1000, num_training_steps=10000)
-    criterion = torch.nn.CrossEntropyLoss()
-
-    # Dummy data for demonstration
-    inputs = torch.randint(0, vocab_size, (batch_size, n_ctx, d_model))
-    targets = torch.randint(0, vocab_size, (batch_size, n_ctx, d_model))
-
-    epoch_data = []
-    for epoch in range(1, epochs+1):
-        loss = train_step(model, optimizer, scheduler, criterion, inputs, targets)
-        eval_loss = eval_step(model, criterion, inputs, targets)
-
-        epoch_data.append({"epoch": epoch, "training_loss": loss, "eval_loss": eval_loss})
-        print(f"Epoch {epoch} | Training loss: {loss} | Evaluation loss: {eval_loss}")
-
-        save_model(model, optimizer, scheduler, epoch, f"model_checkpoint_{epoch}.pth")

@@ -1,4 +1,6 @@
 """
+Saves the Tiny Shakespeare dataset to a binary file for training.
+
 From https://github.com/karpathy/nanoGPT/blob/master/data/shakespeare/prepare.py
 """
 

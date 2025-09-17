@@ -3,22 +3,8 @@ import os
 import torch
 import numpy as np
 
+from config import *
 from model import GPTMinus1, create_optimizer, create_scheduler, save_model
-
-batch_size = 8
-vocab_size = 50257 # GPT-2 Vocab
-n_ctx = 256
-d_model = 256
-n_heads = 4
-n_layers = 2
-lr = 1e-3
-weight_decay = 0.01
-epochs = 1000
-num_warmup_steps = 4000
-device_type = "cpu" # or cuda
-device = "cuda" if torch.cuda.is_available() and device_type == "cuda" else "cpu"
-dataset = "shakespeare" # or hiwiki
-data_dir = os.path.join('data', dataset)
 
 def get_batch(split: str):
     "From https://github.com/karpathy/nanoGPT/blob/master/train.py"
@@ -36,9 +22,10 @@ def get_batch(split: str):
         x, y = x.to(device), y.to(device)
     return x, y
 
-def save_epochs(epoch_data: tuple[float, float, float | None], file_name: str = "epoch_data.csv"):
+def save_iter(iter_data: tuple[float, float, float | None], file_name: str = "iter_data.csv"):
+    os.makedirs(os.path.dirname(file_name), exist_ok=True)
     with open(file_name, 'a', encoding="utf-8") as f:
-        f.write(','.join([f"{i}" for i in epoch_data if i is not None]) + '\n')
+        f.write(','.join([f"{(i) if i is not None else ''}" for i in iter_data]) + '\n')
 
 def train_step(
     model: GPTMinus1,
@@ -72,20 +59,20 @@ def eval_step(
 if __name__ == "__main__":
     model = GPTMinus1(vocab_size, n_ctx, d_model, n_heads, n_layers, device=device).to(device)
 
-    optimizer = create_optimizer(model, lr, weight_decay)
-    scheduler = create_scheduler(optimizer, d_model, num_warmup_steps)
+    optimizer = create_optimizer(model, max_lr, weight_decay)
+    scheduler = create_scheduler(optimizer, min_lr, max_lr, num_lr_decay_steps, num_warmup_steps)
     criterion = torch.nn.CrossEntropyLoss().to(device)
 
     inputs, targets = get_batch('train')
-    for epoch in range(1, epochs+1):
+    for itr in range(1, iters+1):
         loss = train_step(model, optimizer, scheduler, criterion, inputs, targets)
         inputs, targets = get_batch('train')
 
-        if epoch % 100 == 0:
+        if itr % 100 == 0:
             eval_loss = eval_step(model, criterion, inputs, targets)
-            save_epochs((epoch, loss, eval_loss), "out/epoch_data.csv")
-            print(f"Epoch {epoch} | Training loss: {loss:.3f} | Evaluation loss: {eval_loss:.3f}")
-            save_model(model, optimizer, scheduler, epoch, f"out/model_checkpoint_{epoch}.pth")
+            save_iter((itr, loss, eval_loss), "out/iter_data.csv")
+            print(f"Iter {itr} | Training loss: {loss:.3f} | Evaluation loss: {eval_loss:.3f}")
+            save_model(model, optimizer, scheduler, itr, f"out/model_checkpoint_{itr}.pth")
         else:
-            save_epochs((epoch, loss, None), "out/epoch_data.csv")
-            print(f"Epoch {epoch} | Training loss: {loss:.3f}")
+            save_iter((itr, loss, None), "out/iter_data.csv")
+            print(f"Iter {itr} | Training loss: {loss:.3f}")

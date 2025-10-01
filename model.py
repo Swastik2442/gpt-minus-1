@@ -1,8 +1,9 @@
 import math
+from typing_extensions import deprecated
 import torch
 
 class MultiHeadAttention(torch.nn.Module):
-    def __init__(self, d_model: int, n_ctx:int,  n_heads: int, dropout=0.1):
+    def __init__(self, d_model: int, n_ctx: int,  n_heads: int, dropout: float = 0.1):
         super().__init__()
         assert d_model % n_heads == 0
         self.n_heads = n_heads
@@ -47,14 +48,14 @@ class MultiHeadAttention(torch.nn.Module):
         att = self.softmax(att)
         att = self.attn_dropout(att)
         y = att @ v                                                   # (B, nh, C, C) x (B, nh, C, hs) -> (B, nh, C, hs)
-        y = y.transpose(1, 2).contiguous().view(B, C, D) # re-assemble
+        y = y.transpose(1, 2).contiguous().view(B, C, D)    # re-assemble
 
         y = self.proj(y)
         y = self.proj_dropout(y)
         return y
 
 class FFNN(torch.nn.Module):
-    def __init__(self, d_model: int, dropout=0.1):
+    def __init__(self, d_model: int, dropout: float = 0.1):
         super().__init__()
         self.layer1 = torch.nn.Linear(d_model, 4 * d_model)
         self.layer2 = torch.nn.Linear(4 * d_model, d_model)
@@ -70,7 +71,7 @@ class FFNN(torch.nn.Module):
         return x
 
 class Block(torch.nn.Module):
-    def __init__(self, d_model: int, n_ctx: int, n_heads: int, dropout=0.1):
+    def __init__(self, d_model: int, n_ctx: int, n_heads: int, dropout: float = 0.1):
         super().__init__()
         self.attn = MultiHeadAttention(d_model, n_ctx, n_heads, dropout)
         self.ln_1 = torch.nn.LayerNorm(d_model)
@@ -111,6 +112,14 @@ class GPTMinus1(torch.nn.Module):
         x = self.linear(x)
         return x
 
+    def save(self, path: str):
+        torch.save(self.state_dict(), path)
+
+    def load(self, path: str):
+        checkpoint = torch.load(path, map_location=self.device)
+        self.load_state_dict(checkpoint)
+        self.to(device=self.device)
+
 def create_optimizer(model: GPTMinus1, lr: float, weight_decay: float):
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     return optimizer
@@ -138,8 +147,7 @@ def create_scheduler(
     )
     return scheduler
 
-def save_model(
-    model: GPTMinus1,
+def save_metadata(
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
     iteration: int,
@@ -147,11 +155,22 @@ def save_model(
 ):
     torch.save({
         'iteration': iteration,
-        'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'scheduler_state_dict': scheduler.state_dict(),
     }, path)
 
+def load_metadata(
+    optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
+    path: str
+):
+    checkpoint = torch.load(path)
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    iteration = checkpoint['iteration']
+    return iteration
+
+@deprecated("Use model.load() and load_metadata() instead.")
 def load_model(
     model: GPTMinus1,
     optimizer: torch.optim.Optimizer,

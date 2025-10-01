@@ -4,13 +4,13 @@ from concurrent.futures import ThreadPoolExecutor
 
 import regex
 import pypandoc
+from tqdm import tqdm
 
 START_TOKEN = "[START]"
 END_TOKEN = "[END]"
 
 def clean_text(read_path: str, write_path: str):
     content: str
-    print("Reading File:", read_path)
     with open(read_path, 'r', encoding="utf-8") as f:
         content = f.read()
 
@@ -61,7 +61,6 @@ def clean_text(read_path: str, write_path: str):
         )
 
         file_name = os.path.join(write_path, str(i))
-        print("Writing File:", file_name)
         with open(file_name, 'w', encoding='utf-8') as f:
             f.write(split_docs[i])
 
@@ -73,4 +72,4 @@ out_dir = "./textmd"
 out_files = [os.path.join(out_dir, file_path[len(data_dir)+1:]) for file_path in data_files]
 
 with ThreadPoolExecutor() as executor:
-    executor.map(clean_text, data_files, out_files)
+    tuple(tqdm(executor.map(clean_text, data_files, out_files), desc="Cleaning Data", total=len(data_files)))

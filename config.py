@@ -23,10 +23,11 @@ class Config:
     dataset: Literal["hiwiki", "shakespeare"] = "shakespeare"
 
     # derived attributes
-    data_dir: str = field(init=False, repr=False)
+    data_dir: str = field(default="NOT_SET", repr=False)
 
     def __post_init__(self):
-        self.data_dir = os.path.join("data", self.dataset)
+        if self.data_dir == "NOT_SET":
+            self.data_dir = os.path.join("data", self.dataset)
 
         if self.device == "cuda" and not torch.cuda.is_available():
             print("CUDA is not available. Switching to CPU.")

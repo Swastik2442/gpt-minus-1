@@ -8,22 +8,51 @@ from model import GPTMinus1
 # tokenizer = Tokenizer.from_file("../hi_bpe_tokenizer.json")
 tokenizer = tiktoken.get_encoding("gpt2")
 
-def generate_text(model: GPTMinus1, config: Config, start_tokens: str, max_length: int):
+def generate_text(
+    model: GPTMinus1,
+    config: Config,
+    start_tokens: str,
+    max_length: int,
+    top_k: int | None = None,
+    top_p: float | None = None,
+    temperature: float = 1.0
+):
+    assert top_k is None or top_k > 0
+    assert top_p is None or (top_p > 0.0 and top_p <= 1.0)
+    assert temperature > 0.0
+
     model.eval()
     # generated = tokenizer.encode(start_tokens).ids
     generated = tokenizer.encode(start_tokens)
-    gen_length = len(generated)
 
-    for _ in range(max_length - gen_length):
+    for _ in range(max_length):
         with torch.no_grad():
-            generated = generated[-config.n_ctx:]
-            input_ids = torch.tensor(generated, dtype=torch.long).unsqueeze(0).to(config.device)
-            outputs = model(input_ids)
-            next_token_logits = outputs[0, -1, :]
-            next_token = torch.argmax(next_token_logits).item()
-            print(tokenizer.decode([next_token]), end='') # type: ignore
+            inputs = torch.tensor(generated[-config.n_ctx:], dtype=torch.long, device=config.device).unsqueeze(0)
+
+            logits: torch.Tensor = model(inputs)
+            logits = logits[0, -1, :] / temperature # first batch, last token, all probabilities
+
+            # Ref: https://github.com/huggingface/transformers/blob/main/src/transformers/generation/logits_process.py
+            if top_k is not None: # take only top k logits
+                top_k = min(top_k, logits.size(-1))
+                val, _idx = torch.topk(logits, top_k)
+                logits = logits.masked_fill(logits < val[-1], float('-inf'))
+            if top_p is not None:
+                sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+                cumulative_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
+                sorted_indices_to_remove = cumulative_probs > top_p
+
+                # Shift the indices to the right once to keep at least the first token above the threshold
+                sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+                sorted_indices_to_remove[..., 0] = 0
+
+                indices_to_remove = sorted_indices[sorted_indices_to_remove]
+                logits[indices_to_remove] = float('-inf')
+
+            probs = torch.softmax(logits, -1)
+            next_token = torch.multinomial(probs, num_samples=1)[0].item()
+            yield tokenizer.decode([next_token]) # type: ignore
             generated.append(next_token) # type: ignore
-    print()
 
     return tokenizer.decode(generated)
 
@@ -40,4 +69,6 @@ if __name__ == "__main__":
     )
     model.load("out/model_checkpoint_1000.pth")
 
-    generate_text(model, cfg, "\n", 512)
+    for out in generate_text(model, cfg, "\n", 512):
+        print(out, end='')
+    print()

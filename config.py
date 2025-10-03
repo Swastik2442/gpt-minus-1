@@ -1,16 +1,16 @@
 import os
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Literal
 
 import torch
 
 @dataclass
 class Config:
-    batch_size: int = 1024
+    batch_size: int = 8
     vocab_size: int = 50257 # GPT-2 Vocab
-    n_ctx: int = 256
-    d_model: int = 256
+    n_ctx: int = 128
+    d_model: int = 128
     n_heads: int = 4
     n_layers: int = 2
     weight_decay: float = 0.1
@@ -23,10 +23,10 @@ class Config:
     dataset: Literal["hiwiki", "shakespeare"] = "shakespeare"
 
     # derived attributes
-    data_dir: str = field(default="NOT_SET", repr=False)
+    data_dir: str = field(default="SET_AUTOMATICALLY", repr=False)
 
     def __post_init__(self):
-        if self.data_dir == "NOT_SET":
+        if self.data_dir == "SET_AUTOMATICALLY":
             self.data_dir = os.path.join("data", self.dataset)
 
         if self.device == "cuda" and not torch.cuda.is_available():
@@ -49,3 +49,5 @@ class Config:
         with open(path, 'r', encoding="utf-8") as f:
             config_dict = json.load(f)
         return Config(**config_dict)
+
+__FIELDS__ = fields(Config)

@@ -4,7 +4,7 @@ import torch
 import numpy as np
 
 from config import Config
-from model import GPTMinus1, create_optimizer, create_scheduler, save_metadata#, load_metadata
+from model import GPTMinus1
 
 def get_batch(config: Config, split: str):
     "From https://github.com/karpathy/nanoGPT/blob/master/train.py"
@@ -57,9 +57,35 @@ def eval_step(
     return loss.item()
 
 if __name__ == "__main__":
-    cfg = Config()
-    cfg.save()
+    import glob
+    import argparse
 
+    from config import __FIELDS__
+    from model import create_optimizer, create_scheduler, save_metadata, load_metadata
+
+    # Set CLI arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default=None, help='Path to config file (if None, default config is used)')
+    parser.add_argument('--resume', action='store_true', help='Resume from latest checkpoint (in config directory)')
+    for carg in __FIELDS__:
+        parser.add_argument(f'--{carg.name}', type=carg.type, default=None, help=f'Override {carg.name} config (default: {carg.default})')
+    args = parser.parse_args()
+
+    if args.resume and args.config is None:
+        print("Error: --config must be set when using --resume")
+        exit(1)
+
+    print("Loading Config...")
+    out_dir = "out"
+    if args.config:
+        cfg = Config.load(args.config)
+        out_dir = os.path.dirname(args.config)
+    else:
+        cfg = Config(**{carg.name: getattr(args, carg.name) for carg in __FIELDS__ if getattr(args, carg.name) is not None})
+        out_dir = os.path.join("out", cfg.dataset)
+        cfg.save(os.path.join(out_dir, "config.json"))
+
+    # Setup Model, Optimizer, Scheduler, Criterion
     model = GPTMinus1(
         cfg.vocab_size,
         cfg.n_ctx,
@@ -73,9 +99,21 @@ if __name__ == "__main__":
     scheduler = create_scheduler(optimizer, cfg.min_lr, cfg.max_lr, cfg.num_lr_decay_steps, cfg.num_warmup_steps)
     criterion = torch.nn.CrossEntropyLoss().to(cfg.device)
 
-    # model.load("out/model_checkpoint_1000.pth")
-    # load_metadata(optimizer, scheduler, "out/meta_checkpoint_1000.pth")
+    # Resume from latest checkpoint if available
+    if args.config and args.resume:
+        print("Resuming from latest checkpoint...")
+        ckpt_list = glob.glob(os.path.join(out_dir, "model_checkpoint_*.pth"))
+        if len(ckpt_list) == 0:
+            print("No checkpoints found. Starting from scratch.\n")
+        else:
+            latest_ckpt = max(ckpt_list, key=os.path.getctime)
+            print(f"Loading checkpoint: {latest_ckpt}\n")
+            model.load(latest_ckpt)
+            load_metadata(optimizer, scheduler, latest_ckpt.replace("model_checkpoint", "meta_checkpoint"))
+    else:
+        print("Starting Training...\n")
 
+    iter_data_file = os.path.join(out_dir, "iter_data.csv")
     inputs, targets = get_batch(cfg, 'train')
     for itr in range(1, cfg.iters + 1):
         loss = train_step(model, optimizer, scheduler, criterion, inputs, targets)
@@ -83,10 +121,10 @@ if __name__ == "__main__":
 
         if itr % 100 == 0:
             eval_loss = eval_step(model, criterion, inputs, targets)
-            save_iter((itr, loss, eval_loss), "out/iter_data.csv")
+            save_iter((itr, loss, eval_loss), iter_data_file)
             print(f"Iter {itr} | Training loss: {loss:.3f} | Evaluation loss: {eval_loss:.3f}")
-            model.save(f"out/model_checkpoint_{itr}.pth")
-            save_metadata(optimizer, scheduler, itr, f"out/meta_checkpoint_{itr}.pth")
+            model.save(os.path.join(out_dir, f"model_checkpoint_{itr}.pth"))
+            save_metadata(optimizer, scheduler, itr, os.path.join(out_dir, f"meta_checkpoint_{itr}.pth"))
         else:
-            save_iter((itr, loss, None), "out/iter_data.csv")
+            save_iter((itr, loss, None), iter_data_file)
             print(f"Iter {itr} | Training loss: {loss:.3f}")

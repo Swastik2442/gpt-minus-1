@@ -57,8 +57,20 @@ def generate_text(
     return tokenizer.decode(generated)
 
 if __name__ == "__main__":
-    cfg = Config.load()
+    import os
+    import sys
 
+    ckpt_path = "out/shakespeare/model_checkpoint_1000.pth"
+    if len(sys.argv) > 1:
+        ckpt_path = sys.argv[1]
+        if not os.path.exists(ckpt_path):
+            print(f"Error: Checkpoint path '{ckpt_path}' does not exist.")
+            sys.exit(1)
+
+    print("Loading Config...")
+    cfg = Config.load(os.path.join(os.path.dirname(ckpt_path), "config.json"))
+
+    print("Loading Model...")
     model = GPTMinus1(
         cfg.vocab_size,
         cfg.n_ctx,
@@ -67,8 +79,9 @@ if __name__ == "__main__":
         cfg.n_layers,
         device=cfg.device
     )
-    model.load("out/model_checkpoint_1000.pth")
+    model.load(ckpt_path)
 
+    print("Generating Text...\n")
     for out in generate_text(model, cfg, "\n", 512):
         print(out, end='')
     print()

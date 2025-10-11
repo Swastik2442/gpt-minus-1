@@ -75,8 +75,10 @@ class Block(torch.nn.Module):
         super().__init__()
         self.attn = MultiHeadAttention(d_model, n_ctx, n_heads, dropout)
         self.ln_1 = torch.nn.LayerNorm(d_model)
+        # self.ln_1 = torch.nn.RMSNorm(d_model)
         self.ffnn = FFNN(d_model, dropout)
         self.ln_2 = torch.nn.LayerNorm(d_model)
+        # self.ln_2 = torch.nn.RMSNorm(d_model)
 
     def forward(self, x: torch.Tensor):
         # # Post
@@ -86,6 +88,11 @@ class Block(torch.nn.Module):
         # Pre
         x = x + self.attn(self.ln_1(x))
         x = x + self.ffnn(self.ln_2(x))
+
+        # # Post inside Residual
+        # x = x + self.ln_1(self.attn(x))
+        # x = x + self.ln_2(self.ffnn(x))
+
         return x
 
 class GPTMinus1(torch.nn.Module):
@@ -95,7 +102,8 @@ class GPTMinus1(torch.nn.Module):
         self.positional_encoding = torch.nn.Embedding(n_ctx, d_model)
 
         self.transformer = torch.nn.ModuleList([Block(d_model, n_ctx, n_heads, dropout) for _ in range(n_layers)])
-        # self.ln_f = torch.nn.LayerNorm(d_model)
+        self.ln_f = torch.nn.LayerNorm(d_model)
+        # self.ln_f = torch.nn.RMSNorm(d_model)
 
         self.linear = torch.nn.Linear(d_model, vocab_size, bias=False)
         self.dropout = torch.nn.Dropout(dropout)
@@ -108,7 +116,7 @@ class GPTMinus1(torch.nn.Module):
         x = self.dropout(x)
         for block in self.transformer:
             x = block(x)
-        # x = self.ln_f(x)
+        x = self.ln_f(x)
         x = self.linear(x)
         return x
 
@@ -163,7 +171,7 @@ def load_metadata(
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
     path: str
-):
+) -> int:
     checkpoint = torch.load(path)
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
@@ -176,7 +184,7 @@ def load_model(
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
     path: str
-):
+) -> int:
     checkpoint = torch.load(path)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])

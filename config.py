@@ -11,14 +11,14 @@ class Config:
     vocab_size: int = 50257 # GPT-2 Vocab
     n_ctx: int = 128
     d_model: int = 128
-    n_heads: int = 4
+    n_heads: int = 8
     n_layers: int = 2
     weight_decay: float = 0.1
     num_warmup_steps: int = 1000
     num_lr_decay_steps: int = 2000
     min_lr: float = 6e-5
     max_lr: float = 6e-4
-    iters: int = 1000
+    iters: int = 5000
     device: Literal["cuda", "mps", "xpu", "cpu", "meta"] = "cuda"
     dataset: Literal["hiwiki", "shakespeare"] = "shakespeare"
 

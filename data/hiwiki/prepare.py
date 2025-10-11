@@ -24,7 +24,7 @@ data_files = [item_path for item_path in data_paths if os.path.isfile(item_path)
 tokenizer = tiktoken.get_encoding("gpt2")
 
 # about 200K documents (221,340)
-dataset = load_dataset("text", data_files=data_files, num_proc=NUM_PROCESSES)
+dataset = load_dataset("text", data_files=data_files, num_proc=NUM_PROCESSES, sample_by="document")
 
 split_dataset = dataset["train"].train_test_split(test_size=0.0005, seed=2357, shuffle=True) # type: ignore[attr-defined]
 split_dataset['val'] = split_dataset.pop('test') # rename the test split to val
@@ -52,9 +52,13 @@ for split, dset in tokenized.items():
     arr = np.memmap(filename, dtype=np.uint16, mode='w+', shape=(arr_len,))
 
     idx = 0
-    for batch_idx in tqdm(range(TOTAL_BATCHES), desc=f"writing {split}.bin", total=TOTAL_BATCHES):
+    noOfBatches = TOTAL_BATCHES
+    if noOfBatches > dset.shape[0]:
+        noOfBatches = dset.shape[0]
+        print("Less Examples in", split, ": Reducing to", noOfBatches)
+    for batch_idx in tqdm(range(noOfBatches), desc=f"writing {split}.bin", total=noOfBatches):
         # Batch together samples for faster write
-        batch = dset.shard(num_shards=TOTAL_BATCHES, index=batch_idx, contiguous=True).with_format('numpy')
+        batch = dset.shard(num_shards=noOfBatches, index=batch_idx, contiguous=True).with_format('numpy')
         arr_batch = np.concatenate(batch['ids'])
         # Write into mmap
         arr[idx : idx + len(arr_batch)] = arr_batch

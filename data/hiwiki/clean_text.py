@@ -46,6 +46,7 @@ def clean_text(read_path: str, write_path: str):
         '\n', content
     )
 
+    # Remove Start/End Tokens
     split_docs = content.split(f"\n{END_TOKEN}\n{START_TOKEN}\n\n")
     split_docs[0] = split_docs[0][len(f"{START_TOKEN}\n"):]
     split_docs[-1] = split_docs[-1][:-len(f"\n{END_TOKEN}")]
@@ -53,6 +54,11 @@ def clean_text(read_path: str, write_path: str):
     if not os.path.exists(write_path):
         os.makedirs(write_path)
     for i in range(len(split_docs)):
+        # Skip Redirects
+        if "redirect" in split_docs[i] or "REDIRECT" in split_docs[i]:
+            continue
+
+        # Convert to Markdown
         split_docs[i] = pypandoc.convert_text(
             split_docs[i].strip(),
             to='md',
@@ -60,6 +66,7 @@ def clean_text(read_path: str, write_path: str):
             extra_args=["--wrap=none", "-M2GB", "+RTS", "-K64m", "-RTS"]
         )
 
+        # Save to File
         file_name = os.path.join(write_path, str(i))
         with open(file_name, 'w', encoding='utf-8') as f:
             f.write(split_docs[i])

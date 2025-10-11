@@ -51,7 +51,7 @@ def generate_text(
 
             probs = torch.softmax(logits, -1)
             next_token = torch.multinomial(probs, num_samples=1)[0].item()
-            yield tokenizer.decode([next_token]) # type: ignore
+            # yield tokenizer.decode([next_token]) # type: ignore
             generated.append(next_token) # type: ignore
 
     return tokenizer.decode(generated)
@@ -82,6 +82,4 @@ if __name__ == "__main__":
     model.load(ckpt_path)
 
     print("Generating Text...\n")
-    for out in generate_text(model, cfg, "\n", 512):
-        print(out, end='')
-    print()
+    print(generate_text(model, cfg, "\n", 512))
